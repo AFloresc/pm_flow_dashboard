@@ -177,6 +177,80 @@ export default function AutomatedReporting({ project, tasks, resources }: Automa
     doc.save(`${project.name.toLowerCase().replace(/\s+/g, "_")}_report.pdf`);
   };
 
+  // 5. Export Gemini AI optimization report to PDF Format
+  const handleExportAiReportPdf = () => {
+    if (!aiReport) return;
+
+    const doc = new jsPDF();
+    
+    // Header styling
+    doc.setFillColor(99, 102, 241); // Indigo primary color matching Bento Grid theme
+    doc.rect(0, 0, 210, 40, "F");
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("GEMINI AI PROJECT AUDIT & INSIGHTS", 14, 18);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
+    doc.text(`Target Campaign: ${project.name}`, 14, 34);
+
+    let yOffset = 52;
+    doc.setTextColor(33, 33, 33);
+
+    const lines = aiReport.split("\n");
+    
+    lines.forEach((line) => {
+      let trimmed = line.trim();
+      if (!trimmed) {
+        yOffset += 4; // Spacing for empty lines
+        return;
+      }
+
+      let fontSize = 10;
+      let fontStyle = "normal";
+      let text = trimmed;
+
+      if (trimmed.startsWith("###")) {
+        fontSize = 12;
+        fontStyle = "bold";
+        text = trimmed.replace("###", "").trim();
+        yOffset += 4;
+      } else if (trimmed.startsWith("##")) {
+        fontSize = 14;
+        fontStyle = "bold";
+        text = trimmed.replace("##", "").trim();
+        yOffset += 6;
+      } else if (trimmed.startsWith("#")) {
+        fontSize = 16;
+        fontStyle = "bold";
+        text = trimmed.replace("#", "").trim();
+        yOffset += 8;
+      } else if (trimmed.startsWith("-") || trimmed.startsWith("*")) {
+        fontSize = 10;
+        fontStyle = "normal";
+        text = `• ${trimmed.substring(1).trim()}`;
+      }
+
+      doc.setFont("helvetica", fontStyle);
+      doc.setFontSize(fontSize);
+
+      const splitLines = doc.splitTextToSize(text, 182);
+      splitLines.forEach((splitLine: string) => {
+        if (yOffset > 275) {
+          doc.addPage();
+          yOffset = 20;
+        }
+        doc.text(splitLine, 14, yOffset);
+        yOffset += fontSize * 0.5 + 3; // line height spacing
+      });
+    });
+
+    doc.save(`${project.name.toLowerCase().replace(/\s+/g, "_")}_ai_analysis_report.pdf`);
+  };
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
@@ -250,14 +324,27 @@ export default function AutomatedReporting({ project, tasks, resources }: Automa
 
       {/* Gemini AI Optimization section */}
       <Card sx={{ boxShadow: 3, borderRadius: 2, overflow: "hidden" }}>
-        <Box sx={{ bgcolor: "primary.main", color: "primary.contrastText", p: 2.5, display: "flex", alignItems: "center", gap: 1.5 }}>
-          <Brain size={24} />
-          <Box>
-            <Typography variant="subtitle1" fontWeight="bold">Gemini AI Project Optimization Insights</Typography>
-            <Typography variant="caption" sx={{ opacity: 0.85 }}>
-              Intelligently audit project velocity, budget overruns, resource bottlenecks, and team optimization plans.
-            </Typography>
+        <Box sx={{ bgcolor: "primary.main", color: "primary.contrastText", p: 2.5, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1.5 }}>
+          <Box display="flex" alignItems="center" gap={1.5}>
+            <Brain size={24} />
+            <Box>
+              <Typography variant="subtitle1" fontWeight="bold">Gemini AI Project Optimization Insights</Typography>
+              <Typography variant="caption" sx={{ opacity: 0.85 }}>
+                Intelligently audit project velocity, budget overruns, resource bottlenecks, and team optimization plans.
+              </Typography>
+            </Box>
           </Box>
+          {aiReport && (
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<FileDown size={16} />}
+              onClick={handleExportAiReportPdf}
+              sx={{ textTransform: "none", color: "white" }}
+            >
+              Export AI PDF
+            </Button>
+          )}
         </Box>
 
         <CardContent sx={{ p: 3, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -293,15 +380,26 @@ export default function AutomatedReporting({ project, tasks, resources }: Automa
                   return <Typography key={idx} variant="body2" sx={{ mb: 1 }}>{line}</Typography>;
                 })}
               </Box>
-              <Button 
-                variant="outlined" 
-                color="primary" 
-                onClick={generateAiReport} 
-                sx={{ mt: 3, textTransform: "none" }}
-                startIcon={<Brain size={16} />}
-              >
-                Regenerate AI Analysis
-              </Button>
+              <Box display="flex" gap={1.5} sx={{ mt: 3 }}>
+                <Button 
+                  variant="outlined" 
+                  color="primary" 
+                  onClick={generateAiReport} 
+                  sx={{ textTransform: "none" }}
+                  startIcon={<Brain size={16} />}
+                >
+                  Regenerate AI Analysis
+                </Button>
+                <Button 
+                  variant="contained" 
+                  color="secondary" 
+                  onClick={handleExportAiReportPdf} 
+                  sx={{ textTransform: "none", color: "white" }}
+                  startIcon={<FileDown size={16} />}
+                >
+                  Export AI PDF
+                </Button>
+              </Box>
             </Box>
           ) : (
             <Box py={4} textAlign="center">

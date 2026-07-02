@@ -83,6 +83,7 @@ PRO-FLOW is packed with enterprise-ready project management modules:
    - Instantly downloads a complete **PDF Audit Report** containing financials, registries, progress levels, and date ranges.
    - Export full project datasets in lightweight **JSON** format.
    - **Gemini AI Audit Tool**: Initiates a server-side intelligence model to inspect delays, locate bottlenecks, calculate financial variances, and suggest optimal resource re-assignments.
+   - **Export AI Optimization Report as PDF**: Once Gemini AI completes its project analysis, an "Export AI PDF" action unlocks instantly. Users can download a dedicated, styled multi-page PDF containing the exact strategic advice, bottlenecks, and re-allocations recommended by Gemini.
 
 ---
 

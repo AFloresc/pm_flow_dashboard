@@ -9,7 +9,7 @@ import {
   getDocs 
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { Project, Task, Resource, Comment } from "../types";
+import { Project, Task, Resource, Comment, AppUser } from "../types";
 
 // Default seed data for initial setup
 const DEFAULT_RESOURCES: Resource[] = [
@@ -124,12 +124,40 @@ const DEFAULT_TASKS: Task[] = [
   }
 ];
 
-export function useProjectData() {
+function parseAndLogError(
+  err: any,
+  collectionName: string,
+  operation: "create" | "read" | "update" | "delete" | "list",
+  documentId?: string,
+  uid?: string
+): string {
+  const isPermissionDenied = err.code === "permission-denied" || 
+    err.message?.includes("permission-denied") || 
+    err.message?.includes("Missing or insufficient permissions");
+  const code = isPermissionDenied ? "permission-denied" : "unknown";
+  const errorInfo = {
+    code,
+    message: err.message || "Firestore operation failed",
+    collection: collectionName,
+    operation,
+    documentId,
+    uid,
+    timestamp: new Date().toISOString()
+  };
+  const jsonString = JSON.stringify(errorInfo);
+  console.error("Firestore Structured Error:", jsonString);
+  return jsonString;
+}
+
+export function useProjectData(currentUser: AppUser | null) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const isDemo = currentUser?.uid?.startsWith("demo_");
+  const isRealUser = currentUser && !isDemo;
 
   useEffect(() => {
     let unsubscribeProjects = () => {};
@@ -163,6 +191,13 @@ export function useProjectData() {
       }
     };
 
+    if (!isRealUser) {
+      syncLocalFallback();
+      return;
+    }
+
+    setLoading(true);
+
     // Try standard Firestore real-time listener
     try {
       unsubscribeProjects = onSnapshot(
@@ -180,6 +215,8 @@ export function useProjectData() {
         },
         (err) => {
           console.error("Firestore projects error:", err);
+          const jsonErr = parseAndLogError(err, "projects", "list", undefined, currentUser?.uid);
+          setError(jsonErr);
           syncLocalFallback();
         }
       );
@@ -196,7 +233,11 @@ export function useProjectData() {
             setTasks(list);
           }
         },
-        (err) => console.error("Firestore tasks error:", err)
+        (err) => {
+          console.error("Firestore tasks error:", err);
+          const jsonErr = parseAndLogError(err, "tasks", "list", undefined, currentUser?.uid);
+          setError(jsonErr);
+        }
       );
 
       unsubscribeResources = onSnapshot(
@@ -212,11 +253,17 @@ export function useProjectData() {
           }
           setLoading(false);
         },
-        (err) => console.error("Firestore resources error:", err)
+        (err) => {
+          console.error("Firestore resources error:", err);
+          const jsonErr = parseAndLogError(err, "resources", "list", undefined, currentUser?.uid);
+          setError(jsonErr);
+        }
       );
 
     } catch (err: any) {
       console.error("Failed to connect to Firebase Firestore, using fallback.", err);
+      const jsonErr = parseAndLogError(err, "projects", "list", undefined, currentUser?.uid);
+      setError(jsonErr);
       syncLocalFallback();
     }
 
@@ -225,7 +272,7 @@ export function useProjectData() {
       unsubscribeTasks();
       unsubscribeResources();
     };
-  }, []);
+  }, [currentUser]);
 
   // Sync state to local storage if running in local fallback
   const persistLocal = (newProjects: Project[], newTasks: Task[], newResources: Resource[]) => {
@@ -236,9 +283,16 @@ export function useProjectData() {
 
   // Create Project
   const addProject = async (p: Project) => {
-    try {
-      await setDoc(doc(db, "projects", p.id), p);
-    } catch {
+    if (isRealUser) {
+      try {
+        await setDoc(doc(db, "projects", p.id), p);
+      } catch (err: any) {
+        parseAndLogError(err, "projects", "create", p.id, currentUser?.uid);
+        const next = [...projects, p];
+        setProjects(next);
+        persistLocal(next, tasks, resources);
+      }
+    } else {
       const next = [...projects, p];
       setProjects(next);
       persistLocal(next, tasks, resources);
@@ -247,9 +301,16 @@ export function useProjectData() {
 
   // Update Project
   const updateProject = async (p: Project) => {
-    try {
-      await updateDoc(doc(db, "projects", p.id), p as any);
-    } catch {
+    if (isRealUser) {
+      try {
+        await updateDoc(doc(db, "projects", p.id), p as any);
+      } catch (err: any) {
+        parseAndLogError(err, "projects", "update", p.id, currentUser?.uid);
+        const next = projects.map(item => item.id === p.id ? p : item);
+        setProjects(next);
+        persistLocal(next, tasks, resources);
+      }
+    } else {
       const next = projects.map(item => item.id === p.id ? p : item);
       setProjects(next);
       persistLocal(next, tasks, resources);
@@ -258,9 +319,18 @@ export function useProjectData() {
 
   // Delete Project
   const deleteProject = async (projectId: string) => {
-    try {
-      await deleteDoc(doc(db, "projects", projectId));
-    } catch {
+    if (isRealUser) {
+      try {
+        await deleteDoc(doc(db, "projects", projectId));
+      } catch (err: any) {
+        parseAndLogError(err, "projects", "delete", projectId, currentUser?.uid);
+        const next = projects.filter(item => item.id !== projectId);
+        const nextTasks = tasks.filter(t => t.projectId !== projectId);
+        setProjects(next);
+        setTasks(nextTasks);
+        persistLocal(next, nextTasks, resources);
+      }
+    } else {
       const next = projects.filter(item => item.id !== projectId);
       const nextTasks = tasks.filter(t => t.projectId !== projectId);
       setProjects(next);
@@ -271,9 +341,16 @@ export function useProjectData() {
 
   // Create Task
   const addTask = async (t: Task) => {
-    try {
-      await setDoc(doc(db, "tasks", t.id), t);
-    } catch {
+    if (isRealUser) {
+      try {
+        await setDoc(doc(db, "tasks", t.id), t);
+      } catch (err: any) {
+        parseAndLogError(err, "tasks", "create", t.id, currentUser?.uid);
+        const next = [...tasks, t];
+        setTasks(next);
+        persistLocal(projects, next, resources);
+      }
+    } else {
       const next = [...tasks, t];
       setTasks(next);
       persistLocal(projects, next, resources);
@@ -282,9 +359,16 @@ export function useProjectData() {
 
   // Update Task
   const updateTask = async (t: Task) => {
-    try {
-      await setDoc(doc(db, "tasks", t.id), t);
-    } catch {
+    if (isRealUser) {
+      try {
+        await setDoc(doc(db, "tasks", t.id), t);
+      } catch (err: any) {
+        parseAndLogError(err, "tasks", "update", t.id, currentUser?.uid);
+        const next = tasks.map(item => item.id === t.id ? t : item);
+        setTasks(next);
+        persistLocal(projects, next, resources);
+      }
+    } else {
       const next = tasks.map(item => item.id === t.id ? t : item);
       setTasks(next);
       persistLocal(projects, next, resources);
@@ -293,9 +377,16 @@ export function useProjectData() {
 
   // Delete Task
   const deleteTask = async (taskId: string) => {
-    try {
-      await deleteDoc(doc(db, "tasks", taskId));
-    } catch {
+    if (isRealUser) {
+      try {
+        await deleteDoc(doc(db, "tasks", taskId));
+      } catch (err: any) {
+        parseAndLogError(err, "tasks", "delete", taskId, currentUser?.uid);
+        const next = tasks.filter(item => item.id !== taskId);
+        setTasks(next);
+        persistLocal(projects, next, resources);
+      }
+    } else {
       const next = tasks.filter(item => item.id !== taskId);
       setTasks(next);
       persistLocal(projects, next, resources);
@@ -304,9 +395,16 @@ export function useProjectData() {
 
   // Add Resource
   const addResource = async (r: Resource) => {
-    try {
-      await setDoc(doc(db, "resources", r.id), r);
-    } catch {
+    if (isRealUser) {
+      try {
+        await setDoc(doc(db, "resources", r.id), r);
+      } catch (err: any) {
+        parseAndLogError(err, "resources", "create", r.id, currentUser?.uid);
+        const next = [...resources, r];
+        setResources(next);
+        persistLocal(projects, tasks, next);
+      }
+    } else {
       const next = [...resources, r];
       setResources(next);
       persistLocal(projects, tasks, next);
@@ -315,9 +413,16 @@ export function useProjectData() {
 
   // Update Resource
   const updateResource = async (r: Resource) => {
-    try {
-      await setDoc(doc(db, "resources", r.id), r);
-    } catch {
+    if (isRealUser) {
+      try {
+        await setDoc(doc(db, "resources", r.id), r);
+      } catch (err: any) {
+        parseAndLogError(err, "resources", "update", r.id, currentUser?.uid);
+        const next = resources.map(item => item.id === r.id ? r : item);
+        setResources(next);
+        persistLocal(projects, tasks, next);
+      }
+    } else {
       const next = resources.map(item => item.id === r.id ? r : item);
       setResources(next);
       persistLocal(projects, tasks, next);
@@ -326,9 +431,16 @@ export function useProjectData() {
 
   // Delete Resource
   const deleteResource = async (resourceId: string) => {
-    try {
-      await deleteDoc(doc(db, "resources", resourceId));
-    } catch {
+    if (isRealUser) {
+      try {
+        await deleteDoc(doc(db, "resources", resourceId));
+      } catch (err: any) {
+        parseAndLogError(err, "resources", "delete", resourceId, currentUser?.uid);
+        const next = resources.filter(item => item.id !== resourceId);
+        setResources(next);
+        persistLocal(projects, tasks, next);
+      }
+    } else {
       const next = resources.filter(item => item.id !== resourceId);
       setResources(next);
       persistLocal(projects, tasks, next);

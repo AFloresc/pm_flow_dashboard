@@ -1,0 +1,117 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Global Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 3. Entity-Specific Schema Validation
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role']) &&
+        data.keys().size() == 4 &&
+        data.uid is string && data.uid == request.auth.uid &&
+        data.email is string && data.email.size() <= 256 &&
+        data.displayName is string && data.displayName.size() <= 128 &&
+        data.role is string && (data.role == 'manager' || data.role == 'member');
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['id', 'name', 'description', 'budget', 'createdAt']) &&
+        data.keys().size() == 5 &&
+        data.id is string && data.id.size() <= 128 &&
+        data.name is string && data.name.size() <= 200 &&
+        data.description is string && data.description.size() <= 2000 &&
+        data.budget is number && data.budget >= 0 &&
+        data.createdAt is number;
+    }
+
+    function isValidResource(data) {
+      return data.keys().hasAll(['id', 'name', 'type', 'costRate', 'unit']) &&
+        data.keys().size() == 5 &&
+        data.id is string && data.id.size() <= 128 &&
+        data.name is string && data.name.size() <= 200 &&
+        data.type is string && (data.type == 'member' || data.type == 'material') &&
+        data.costRate is number && data.costRate >= 0 &&
+        data.unit is string && (data.unit == 'hour' || data.unit == 'flat');
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll([
+        'id', 'projectId', 'title', 'description', 
+        'expectedStart', 'expectedFinish', 'progress', 
+        'dependencies', 'allocatedResources', 'subtasks', 
+        'comments', 'status'
+      ]) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.projectId is string && data.projectId.size() <= 128 &&
+        data.title is string && data.title.size() <= 200 &&
+        data.description is string && data.description.size() <= 2000 &&
+        data.expectedStart is string && data.expectedStart.size() <= 20 &&
+        data.expectedFinish is string && data.expectedFinish.size() <= 20 &&
+        data.progress is number && data.progress >= 0 && data.progress <= 100 &&
+        data.dependencies is list && data.dependencies.size() <= 20 &&
+        data.allocatedResources is list && data.allocatedResources.size() <= 50 &&
+        data.subtasks is list && data.subtasks.size() <= 100 &&
+        data.comments is list && data.comments.size() <= 500 &&
+        data.status is string && (
+          data.status == 'planning' || 
+          data.status == 'in_progress' || 
+          data.status == 'completed' || 
+          data.status == 'delayed'
+        );
+    }
+
+    // 4. Collection Access Control Rules
+
+    // Users Collection
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create, update: if isSignedIn() && userId == request.auth.uid && isValidUser(incoming());
+      allow delete: if isSignedIn() && userId == request.auth.uid;
+    }
+
+    // Projects Collection
+    match /projects/{projectId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(projectId) && isValidProject(incoming());
+      allow update: if isSignedIn() && isValidId(projectId) && isValidProject(incoming());
+      allow delete: if isSignedIn() && isValidId(projectId);
+    }
+
+    // Tasks Collection
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(taskId) && isValidTask(incoming());
+      allow update: if isSignedIn() && isValidId(taskId) && isValidTask(incoming());
+      allow delete: if isSignedIn() && isValidId(taskId);
+    }
+
+    // Resources Collection
+    match /resources/{resourceId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(resourceId) && isValidResource(incoming());
+      allow update: if isSignedIn() && isValidId(resourceId) && isValidResource(incoming());
+      allow delete: if isSignedIn() && isValidId(resourceId);
+    }
+  }
+}

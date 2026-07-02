@@ -21,7 +21,8 @@ import {
   DialogContent,
   DialogActions,
   ThemeProvider,
-  createTheme
+  createTheme,
+  Alert
 } from "@mui/material";
 import { useProjectData } from "./hooks/useProjectData";
 import { AppUser, Project, Task } from "./types";
@@ -154,6 +155,26 @@ export default function App() {
   // Selection bridging: when clicking a task in Gantt Chart, redirect to Task Tracking with it selected
   const [bridgedSelectedTask, setBridgedSelectedTask] = useState<Task | null>(null);
 
+  // Helper to parse potential JSON structured errors from useProjectData
+  const getParsedFirestoreError = () => {
+    if (!dataError) return null;
+    try {
+      const parsed = JSON.parse(dataError);
+      if (parsed && typeof parsed === "object" && "code" in parsed && "collection" in parsed) {
+        return parsed;
+      }
+    } catch {
+      // Not a JSON string
+    }
+    return {
+      code: "unknown",
+      message: dataError,
+      collection: "N/A",
+      operation: "N/A",
+      timestamp: new Date().toISOString()
+    };
+  };
+
   // Firestore & fallback LocalStorage synchronization hook
   const {
     projects,
@@ -168,7 +189,7 @@ export default function App() {
     addResource,
     updateResource,
     deleteResource
-  } = useProjectData();
+  } = useProjectData(currentUser);
 
   // Project Editing dialog
   const [projDialogOpen, setProjDialogOpen] = useState(false);
@@ -337,6 +358,57 @@ export default function App() {
 
         {/* Main Body */}
         <Container maxWidth="xl" sx={{ mt: 4 }}>
+          {/* Structured Firestore Error Troubleshooting Panel */}
+          {dataError && (() => {
+            const errInfo = getParsedFirestoreError();
+            if (!errInfo) return null;
+            return (
+              <Alert 
+                severity="error" 
+                variant="filled"
+                sx={{ 
+                  mb: 4, 
+                  borderRadius: 2, 
+                  boxShadow: 3,
+                  bgcolor: "#7f1d1d", // Dark Red
+                  color: "#fef2f2",
+                  "& .MuiAlert-icon": { color: "#fca5a5" }
+                }}
+              >
+                <Box>
+                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                    Firestore Connection Warning (Zero-Trust Security Active)
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.9, mb: 1.5 }}>
+                    The workspace detected a {errInfo.code === "permission-denied" ? "Permission Denied" : "Database Connection"} event while attempting a <strong>{errInfo.operation}</strong> operation on the <strong>{errInfo.collection}</strong> collection.
+                  </Typography>
+                  <Paper sx={{ p: 1.5, bgcolor: "rgba(0, 0, 0, 0.4)", borderRadius: 1, border: "1px dashed rgba(255, 255, 255, 0.2)", mb: 1.5 }}>
+                    <Typography variant="caption" display="block" color="#fca5a5" fontFamily="monospace">
+                      <strong>Code:</strong> {errInfo.code} | <strong>Collection:</strong> {errInfo.collection} | <strong>Operation:</strong> {errInfo.operation}
+                    </Typography>
+                    <Typography variant="caption" display="block" color="#fca5a5" fontFamily="monospace" sx={{ mt: 0.5 }}>
+                      <strong>Message:</strong> {errInfo.message}
+                    </Typography>
+                    <Typography variant="caption" display="block" color="rgba(255, 255, 255, 0.5)" fontFamily="monospace" sx={{ mt: 0.5 }}>
+                      <strong>Timestamp:</strong> {errInfo.timestamp}
+                    </Typography>
+                  </Paper>
+                  <Typography variant="body2" fontWeight="medium">
+                    💡 Troubleshooting Recommendations:
+                  </Typography>
+                  <Typography variant="caption" display="block" sx={{ opacity: 0.8, mt: 0.5, pl: 1 }}>
+                    • {errInfo.code === "permission-denied" 
+                       ? "The database security policies are restricting this action. Please log in with a user that has the correct authorized role (Project Manager for creating resources/projects, or Team Member for workspace operations)." 
+                       : "Check your network connection, firestore region configurations, or browser console logs for technical exceptions."}
+                  </Typography>
+                  <Typography variant="caption" display="block" sx={{ opacity: 0.8, mt: 0.5, pl: 1 }}>
+                    • Active fallback system is currently engaged. Your session has safely switched to the offline localStorage sandbox.
+                  </Typography>
+                </Box>
+              </Alert>
+            );
+          })()}
+
           {/* Active Project Header Widget */}
           {activeProject && (
             <Paper sx={{ p: 2.5, mb: 4, borderRadius: 2, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2, boxShadow: 1 }}>

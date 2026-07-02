@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "Enterprise project document representing a workspace campaign.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "budget": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "description", "budget", "createdAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A single piece of work associated with a project.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "expectedStart": { "type": "string" },
+        "expectedFinish": { "type": "string" },
+        "realStart": { "type": "string" },
+        "realFinish": { "type": "string" },
+        "progress": { "type": "number" },
+        "dependencies": { "type": "array" },
+        "allocatedResources": { "type": "array" },
+        "subtasks": { "type": "array" },
+        "comments": { "type": "array" },
+        "status": { "type": "string" }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "title",
+        "description",
+        "expectedStart",
+        "expectedFinish",
+        "progress",
+        "dependencies",
+        "allocatedResources",
+        "subtasks",
+        "comments",
+        "status"
+      ]
+    },
+    "Resource": {
+      "title": "Resource",
+      "description": "A resource allocation record (member or material).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "costRate": { "type": "number" },
+        "unit": { "type": "string" }
+      },
+      "required": ["id", "name", "type", "costRate", "unit"]
+    }
+  },
+  "firestore": {
+    "projects": {
+      "schema": "Project",
+      "description": "Store all project definitions."
+    },
+    "tasks": {
+      "schema": "Task",
+      "description": "Store tasks linked to projects."
+    },
+    "resources": {
+      "schema": "Resource",
+      "description": "Store all resources."
+    }
+  }
+}
