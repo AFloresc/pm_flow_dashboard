@@ -1,0 +1,6 @@
+{
+  "name": "Project Manager Dashboard",
+  "description": "Full-stack project management dashboard featuring Gantt charts, real-time task tracking, resource allocations, and Gemini AI optimizations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
