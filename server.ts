@@ -1,7 +1,12 @@
-import express from "express";
+import dotenv from "dotenv";
 import path from "path";
+import express from "express";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+
+// Load .env explicitly from process.cwd() with override: true
+const envPath = path.resolve(process.cwd(), ".env");
+const dotenvResult = dotenv.config({ path: envPath, override: true });
 
 async function startServer() {
   const app = express();
@@ -18,13 +23,19 @@ async function startServer() {
         return res.status(400).json({ error: "Missing project data" });
       }
 
-      const apiKey = process.env.GEMINI_API_KEY;
+      const rawKey = process.env.GEMINI_API_KEY;
+      const apiKey = rawKey ? rawKey.trim().replace(/^["']|["']$/g, "") : "";
+      console.log("Report generation requested. GEMINI_API_KEY status:", apiKey ? "LOADED ✅" : "MISSING ❌");
+
       if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
         return res.status(200).json({
           report: `### ⚠️ Gemini API Key Required
 It looks like the Gemini API Key is not set yet.
 
-To enable automated reporting and resource optimization, please configure your **GEMINI_API_KEY** inside the **Secrets** tab in Google AI Studio.
+To enable automated reporting and resource optimization, please configure your **GEMINI_API_KEY** inside the **.env** file at the root of your project:
+\`\`\`env
+GEMINI_API_KEY=your_actual_api_key_here
+\`\`\`
 
 #### Basic Project Stats (Locally Calculated):
 - **Project Name:** ${project.name}
@@ -118,7 +129,29 @@ Write in a highly professional, constructive, and direct tone. Do not mention th
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    const rawKey = process.env.GEMINI_API_KEY;
+    const cleanKey = rawKey ? rawKey.trim().replace(/^["']|["']$/g, "") : "";
+    
+    console.log(`\n==================================================`);
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    if (dotenvResult.error) {
+      console.log(`⚠️  dotenv error loading .env: ${dotenvResult.error.message}`);
+    } else {
+      console.log(`📁 .env loaded from: ${envPath}`);
+      console.log(`🔑 Parsed keys in .env: ${dotenvResult.parsed ? Object.keys(dotenvResult.parsed).join(", ") : "none"}`);
+    }
+    
+    if (cleanKey) {
+      console.log(`✅ GEMINI_API_KEY status: LOADED (length: ${cleanKey.length})`);
+      if (!cleanKey.startsWith("AIzaSy")) {
+        console.log(`⚠️  WARNING: Your GEMINI_API_KEY starts with "${cleanKey.substring(0, 4)}...". Gemini API keys usually start with "AIzaSy...". Make sure you generated a Gemini API key from https://aistudio.google.com/app/apikey`);
+      }
+    } else {
+      console.log(`❌ GEMINI_API_KEY status: MISSING`);
+      console.log(`👉 Please ensure you have a file named ".env" (not ".env.txt") in your project root with:`);
+      console.log(`   GEMINI_API_KEY=AIzaSy...`);
+    }
+    console.log(`==================================================\n`);
   });
 }
 
